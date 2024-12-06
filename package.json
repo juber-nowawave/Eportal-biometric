@@ -1,0 +1,23 @@
+{
+  "name": "biometric",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "biometric": "file:",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "fast-xml-parser": "^4.5.0",
+    "mongoose": "^8.8.3",
+    "node-cron": "^3.0.3",
+    "nodemon": "^3.1.7"
+  }
+}

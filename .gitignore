@@ -1,0 +1,62 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Node modules
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Dependency directories
+jspm_packages/
+client/node_modules/
+server/node_modules/
+
+# Optional npm cache directory
+.npm/
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn & lockfiles
+.yarn/
+.pnp.*
+package-lock.json
+yarn.lock
+
+# dotenv environment files
+.env
+.env.local
+.env.*.local
+
+# Debugger files
+.vscode/
+.idea/
+
+# Coverage directory used by testing tools
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+
+# IDE files
+.DS_Store
+Thumbs.db
+
+# Generated database files
+*.sqlite3
+*.db
+*.sql
+
+# Other config files
+*.log*
