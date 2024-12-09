@@ -8,7 +8,7 @@ const app = express();
 const PORT = 9000;
 app.use(cors());
 const date = new Date();
-const currentDate = date.getDate();
+const currentDate = date.getDate() - 4;
 const currentMonth = date.getMonth() + 1;
 const currentYear = date.getFullYear();
 console.log("date:",currentDate , 'month:' , currentMonth , "year:" ,currentYear);
@@ -16,16 +16,17 @@ console.log("date:",currentDate , 'month:' , currentMonth , "year:" ,currentYear
 
 // storing biometric data in Database
 const postBiometricAttendence = async () =>{
+    // biometric backend port link
     const getBiometricData = await axios.get('http://localhost:9000/biometric/xmlapi');
-    const postBiometricData = await axios.post('http://localhost:4000/Employee/biometric/attendence',getBiometricData.data);
+
+    // Eportal backend port link
+    const postBiometricData = await axios.post('https://g79l1s80-4000.inc1.devtunnels.ms/Employee/biometric/attendence',getBiometricData.data);
     console.log('jjkhkh',postBiometricData.config.data);
 }
 
 // it will store per day attendance data into mongoDB at given time
 // cron.schedule('*/5 * * * * *',postBiometricAttendence);
   
-
-
 app.get('/biometric/xmlapi',async (req,res)=>{
     const week = [
         'Sunday',
@@ -80,7 +81,45 @@ app.get('/biometric/xmlapi',async (req,res)=>{
             return acc;
         },[])
         jsonData.sort((a,b)=> Number(a.id) - Number(b.id));
-        // console.log(jsonData);
+        
+        // calculate all day's workingHour  
+        let totalWorkingHourSeconds = 0;
+        let i = 0;
+        let dataLen = jsonData.length;
+        let pervID = jsonData[0]?.esslId
+        while(i < dataLen){
+            if(Number(jsonData[i]?.esslId) == Number(jsonData[i+1]?.esslId)){
+             const [checkInHour , checkInMinutes , checkInSeconds]= jsonData[i].time.split(':').map(Number);
+             const checkInTimeInSeconds = checkInHour*3600 + checkInMinutes*60 + checkInSeconds;
+       
+             const [checkOutHour , checkOutMinutes , checkOutSeconds]= jsonData[i+1].time.split(':').map(Number);
+             const checkOutTimeInSeconds = checkOutHour*3600 + checkOutMinutes*60 + checkOutSeconds;
+             
+             const workingTime = checkOutTimeInSeconds - checkInTimeInSeconds;
+             if(pervID != jsonData[i]?.esslId){
+                pervID = jsonData[i]?.esslId;
+                totalWorkingHourSeconds = 0;
+             }
+             totalWorkingHourSeconds += workingTime;
+             
+             // convert seconds into actual time
+             const hrs = Math.floor(totalWorkingHourSeconds / 3600);
+             const mins = Math.floor((totalWorkingHourSeconds % 3600) / 60);
+             const secs = totalWorkingHourSeconds % 60;
+             const actualTime = `${hrs.toString().padStart(2, '0')}.${mins.toString().padStart(2, '0')}.${secs.toString().padStart(2, '0')}`; 
+             
+             // store actual time into object's workingHour field
+             jsonData[i+1].workingHour = actualTime;
+             i+=2;  
+             
+            //  console.log(jsonData[i].esslId,totalWorkingHourSeconds,checkOutTimeInSeconds,checkInTimeInSeconds);
+            
+          }else{
+             totalWorkingHourSeconds = 0;
+             i++;
+          }
+        }
+        console.log('lenght' , jsonData);
         return res.status(200).json(jsonData);
     }catch(err){
         console.log('error during fetch XMLAPI',err);
