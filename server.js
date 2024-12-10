@@ -8,7 +8,7 @@ const app = express();
 const PORT = 9000;
 app.use(cors());
 const date = new Date();
-const currentDate = date.getDate() - 4;
+const currentDate = date.getDate();
 const currentMonth = date.getMonth() + 1;
 const currentYear = date.getFullYear();
 console.log("date:",currentDate , 'month:' , currentMonth , "year:" ,currentYear);
@@ -25,7 +25,7 @@ const postBiometricAttendence = async () =>{
 }
 
 // it will store per day attendance data into mongoDB at given time
-// cron.schedule('*/5 * * * * *',postBiometricAttendence);
+// cron.schedule('*/8 * * * * *',postBiometricAttendence);
   
 app.get('/biometric/xmlapi',async (req,res)=>{
     const week = [
@@ -66,18 +66,30 @@ app.get('/biometric/xmlapi',async (req,res)=>{
         
         // handle error if data is not available , example=> saturday and sunday
         if(parser[1] == undefined){
-            const data = [{'esslId':'not available' , 'date':`${currentYear}-${currentMonth}-${currentDate}`, 'day':week[day] ,'time':'not available' , 'workingHour':'not available'}]
+            const data = [{'entryType':'not available' ,'esslId':'not available' , 'date':`${currentYear}-${currentMonth}-${currentDate}`, 'day':week[day] ,'time':'not available' , 'workingHour':'not available', 'attendenceType':'not available'}]
             return res.status(200).json(data);
         }
 
         const data = parser[1].split('\n');
-        const jsonData = data.reduce((acc,value)=>{
+        let prevId = null;
+        const jsonData = data.reduce((acc,value,index)=>{
             const arrData = value.split('\t')
             let len = arrData.length;
-            if(len > 1){
-                const day_time = arrData[1].split(' ');
-                acc.push({'esslId':arrData[0] , 'date':day_time[0] , 'day':week[day] ,'time':day_time[1] , 'workingHour':''}) 
+            
+            if(prevId != arrData[0]){
+                if(len > 1){
+                    const day_time = arrData[1].split(' ');
+                    acc.push({'entryType':'checkIn', 'esslId':arrData[0] , 'date':day_time[0] , 'day':week[day] ,'time':day_time[1] , 'workingHour':'' , 'attendenceType':''}) 
+                    prevId = arrData[0];
+                } 
+            }else{
+                if(len > 1){
+                    const day_time = arrData[1].split(' ');
+                    acc.push({'entryType':'checkOut', 'esslId':arrData[0] , 'date':day_time[0] , 'day':week[day] ,'time':day_time[1] , 'workingHour':'' , 'attendenceType':''}) 
+                    prevId = null;
+                }
             }
+
             return acc;
         },[])
         jsonData.sort((a,b)=> Number(a.id) - Number(b.id));
@@ -87,6 +99,7 @@ app.get('/biometric/xmlapi',async (req,res)=>{
         let i = 0;
         let dataLen = jsonData.length;
         let pervID = jsonData[0]?.esslId
+        let actualTime = null;
         while(i < dataLen){
             if(Number(jsonData[i]?.esslId) == Number(jsonData[i+1]?.esslId)){
              const [checkInHour , checkInMinutes , checkInSeconds]= jsonData[i].time.split(':').map(Number);
@@ -106,16 +119,66 @@ app.get('/biometric/xmlapi',async (req,res)=>{
              const hrs = Math.floor(totalWorkingHourSeconds / 3600);
              const mins = Math.floor((totalWorkingHourSeconds % 3600) / 60);
              const secs = totalWorkingHourSeconds % 60;
-             const actualTime = `${hrs.toString().padStart(2, '0')}.${mins.toString().padStart(2, '0')}.${secs.toString().padStart(2, '0')}`; 
+             actualTime = `${hrs.toString().padStart(2, '0')}.${mins.toString().padStart(2, '0')}.${secs.toString().padStart(2, '0')}`; 
              
              // store actual time into object's workingHour field
              jsonData[i+1].workingHour = actualTime;
+             jsonData[i].workingHour = actualTime;
+
+             // calculate attendance-type based on totalWorkingHour
+             const fullDay = 9*3600 + 20*60;
+             const halfDay = 5*3600;
+             if(fullDay <= totalWorkingHourSeconds && halfDay <= totalWorkingHourSeconds){
+                 jsonData[i+1].attendenceType = 'Present'
+                 jsonData[i].attendenceType = 'Present'
+             }
+             else if(fullDay >= totalWorkingHourSeconds && halfDay <= totalWorkingHourSeconds){
+                 jsonData[i+1].attendenceType = 'Half Day'
+                 jsonData[i].attendenceType = 'Half Day'
+             }
+             else{
+                 jsonData[i+1].attendenceType = 'Absent'
+                 jsonData[i].attendenceType = 'Absent'
+             }  
+
+             // i pointer go on first check-in entry (even)
              i+=2;  
              
             //  console.log(jsonData[i].esslId,totalWorkingHourSeconds,checkOutTimeInSeconds,checkInTimeInSeconds);
             
           }else{
+
+             // if employee continuesly mark attendance in even times like (2,4,6 .. ); checkIn , checkOut at morning and then at evening if he just marks one time for checkOut but it would be consider as checkIn so this given code help to resolve it 
+             const [checkInHour , checkInMinutes , checkInSeconds]= jsonData[i].time.split(':').map(Number);
+             const checkInTimeInSeconds = checkInHour*3600 + checkInMinutes*60 + checkInSeconds;
+             
+             const [checkOutHour , checkOutMinutes , checkOutSeconds]= jsonData[i-1]?.time.split(':').map(Number);
+             const checkOutTimeInSeconds = checkOutHour*3600 + checkOutMinutes*60 + checkOutSeconds;
+             
+             const workingTime = Math.abs(checkOutTimeInSeconds - checkInTimeInSeconds);
+             if(pervID != jsonData[i]?.esslId){
+                pervID = jsonData[i]?.esslId;
+                totalWorkingHourSeconds = 0;
+             }
+
+             totalWorkingHourSeconds += workingTime;
+             
+             // convert seconds into actual time
+             const hrs = Math.floor(totalWorkingHourSeconds / 3600);
+             const mins = Math.floor((totalWorkingHourSeconds % 3600) / 60);
+             const secs = totalWorkingHourSeconds % 60;
+             actualTime = `${hrs.toString().padStart(2, '0')}.${mins.toString().padStart(2, '0')}.${secs.toString().padStart(2, '0')}`; 
+
+             jsonData[i].workingHour = actualTime;
+
+            // calculate attendance-type based on totalWorkingHour
+            const fullDay = 9*3600 + 20*60;
+            const halfDay = 5*3600;
+            if(fullDay <= totalWorkingHourSeconds && halfDay <= totalWorkingHourSeconds) jsonData[i].attendenceType = 'Present'
+            else if(fullDay >= totalWorkingHourSeconds && halfDay <= totalWorkingHourSeconds) jsonData[i].attendenceType = 'Half Day'
+            else  jsonData[i].attendenceType = 'Absent'
              totalWorkingHourSeconds = 0;
+
              i++;
           }
         }
