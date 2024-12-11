@@ -151,10 +151,13 @@ app.get('/biometric/xmlapi',async (req,res)=>{
              // if employee continuesly mark attendance in even times like (2,4,6 .. ); checkIn , checkOut at morning and then at evening if he just marks one time for checkOut but it would be consider as checkIn so this given code help to resolve it 
              const [checkInHour , checkInMinutes , checkInSeconds]= jsonData[i].time.split(':').map(Number);
              const checkInTimeInSeconds = checkInHour*3600 + checkInMinutes*60 + checkInSeconds;
-             
-             const [checkOutHour , checkOutMinutes , checkOutSeconds]= jsonData[i-1]?.time.split(':').map(Number);
-             const checkOutTimeInSeconds = checkOutHour*3600 + checkOutMinutes*60 + checkOutSeconds;
-             
+             let checkOutTimeInSeconds = null;
+
+             if(jsonData[i-1] != undefined){
+                 const [checkOutHour , checkOutMinutes , checkOutSeconds]= jsonData[i-1]?.time.split(':').map(Number);
+                 checkOutTimeInSeconds = checkOutHour*3600 + checkOutMinutes*60 + checkOutSeconds;
+             }
+             if(checkOutTimeInSeconds == null) checkOutTimeInSeconds = 0;
              const workingTime = Math.abs(checkOutTimeInSeconds - checkInTimeInSeconds);
              if(pervID != jsonData[i]?.esslId){
                 pervID = jsonData[i]?.esslId;
